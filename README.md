@@ -12,8 +12,8 @@ Sango/
 └── backend/    # FastAPI (Python) — holds the prompt + Gemini call
 ```
 
-> **Status:** scaffold. The `/chat` endpoint currently echoes the message back.
-> Gemini gets wired in the next step.
+> **Status:** working. Full chat UI (Pidgin/English/French) talking to Gemini,
+> with conversation history persisted in SQLite so a refresh restores the session.
 
 ## Prerequisites
 
@@ -60,17 +60,38 @@ cp .env.local.example .env.local   # Windows: copy .env.local.example .env.local
 npm run dev
 ```
 
-Open `http://localhost:3000`, click **Send test message**, and you should see the
-echoed reply from the backend.
+Open `http://localhost:3000`, pick a language, and start chatting with Sango.
 
 ## Environment variables
 
 | App      | File          | Variable            | Purpose                                  |
 | -------- | ------------- | ------------------- | ---------------------------------------- |
 | backend  | `.env`        | `GEMINI_API_KEY`    | Google Gemini API key (server-side only) |
-| backend  | `.env`        | `GEMINI_MODEL`      | Gemini model id                          |
+| backend  | `.env`        | `GEMINI_MODEL`      | Gemini model id (default `gemini-2.5-flash-lite`) |
+| backend  | `.env`        | `GEMINI_TEMPERATURE` / `GEMINI_MAX_OUTPUT_TOKENS` | Reply warmth / max length |
 | backend  | `.env`        | `CORS_ORIGINS`      | Allowed frontend origins (comma-sep)     |
+| backend  | `.env`        | `DATABASE_PATH`     | SQLite file for conversation history     |
 | frontend | `.env.local`  | `NEXT_PUBLIC_API_URL` | Base URL of the backend                |
 
 `.env` / `.env.local` are git-ignored — never commit secrets. The Gemini key
 lives only on the backend and is never exposed to the frontend.
+
+## ⚠️ Gemini API quota & billing (read before the showcase)
+
+The Gemini **free tier is capped at ~20 requests/day per model**. That is fine for
+light development but **will not survive a live demo** — a handful of judges each
+sending a few messages exhausts it in minutes, after which Sango falls back to a
+soft "try again" message instead of replying.
+
+**Before Technology Day, enable billing** on the Google Cloud project tied to your
+`GEMINI_API_KEY` (https://aistudio.google.com/ → API key → its project → enable
+billing). This moves you onto the paid tier with far higher limits; `flash-lite`
+and `flash` cost only a fraction of a cent per message, so a full day of judging is
+negligible.
+
+Notes:
+- The default model is `gemini-2.5-flash-lite` (most generous free quota, fast).
+  `gemini-2.5-flash` gives slightly richer replies but a smaller free quota — set
+  `GEMINI_MODEL` to switch. Each model has its **own** separate daily quota.
+- If you hit the cap mid-development, either wait for the daily reset (~midnight US
+  Pacific) or switch `GEMINI_MODEL` to a model you haven't used up that day.
