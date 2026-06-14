@@ -22,6 +22,16 @@ export async function sendChat(body: ChatRequestBody): Promise<ChatResponse> {
   return (await res.json()) as ChatResponse;
 }
 
+/** Fire-and-forget ping to wake a sleeping (Render free-tier) backend. Best-effort:
+ *  failures are swallowed so a cold/unreachable backend never shows an error. */
+export async function warmBackend(): Promise<void> {
+  try {
+    await fetch(`${API_URL}/ping`, { method: "GET" });
+  } catch {
+    /* ignore — keep-warm is best-effort */
+  }
+}
+
 /** Fetch a saved conversation's history. Returns null if it no longer exists. */
 export async function getConversation(
   conversationId: string,

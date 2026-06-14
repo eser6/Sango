@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatMessage, Language } from "./types";
 import { CONTENT } from "./lib/content";
-import { sendChat, getConversation } from "./lib/api";
+import { sendChat, getConversation, warmBackend } from "./lib/api";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { MessageBubble } from "./components/MessageBubble";
 import { TypingIndicator } from "./components/TypingIndicator";
@@ -27,6 +27,12 @@ export default function Home() {
 
   const content = CONTENT[language];
   const isEmpty = messages.length === 0;
+
+  // On load: wake the (possibly sleeping) backend right away, so it's warming up
+  // behind the welcome screen before the first message is sent.
+  useEffect(() => {
+    warmBackend();
+  }, []);
 
   // On load: if we have a saved conversation id, fetch and restore its history.
   useEffect(() => {

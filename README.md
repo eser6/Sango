@@ -95,3 +95,23 @@ Notes:
   `GEMINI_MODEL` to switch. Each model has its **own** separate daily quota.
 - If you hit the cap mid-development, either wait for the daily reset (~midnight US
   Pacific) or switch `GEMINI_MODEL` to a model you haven't used up that day.
+
+## Keeping the backend warm (Render free tier)
+
+Render's free tier puts the service to sleep after ~15 min of inactivity; the next
+request then waits 30–60s for a cold start — painful in a live demo.
+
+There's a dedicated lightweight endpoint for this:
+
+```
+GET /ping  ->  {"status": "awake"}
+```
+
+It does no Gemini or DB work, so it's cheap to hit often. Two layers use it:
+
+1. **On page load** the frontend fires a `/ping` (best-effort) so the backend
+   starts waking behind the welcome screen before the first message is sent.
+2. **Before/during the showcase**, set up an external uptime pinger to hit
+   `https://<your-backend>.onrender.com/ping` every 5–10 minutes so the instance
+   never sleeps. Free options: [UptimeRobot](https://uptimerobot.com) or
+   [cron-job.org](https://cron-job.org).

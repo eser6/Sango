@@ -64,6 +64,13 @@ class ConversationResponse(BaseModel):
     messages: List[Message]
 
 
+@app.get("/ping")
+def ping() -> dict[str, str]:
+    """Ultra-light keep-warm endpoint (no Gemini, no DB). Ping this to wake the
+    Render free-tier instance from sleep before it's actually needed."""
+    return {"status": "awake"}
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "gemini_configured": str(gemini.is_configured()).lower()}
