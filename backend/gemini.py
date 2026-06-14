@@ -13,14 +13,15 @@ from typing import List, Sequence
 from google import genai
 from google.genai import types
 
-from prompts import DEFAULT_LANGUAGE, FEW_SHOT_EXAMPLES, SYSTEM_PROMPTS
+import persona
+from persona import DEFAULT_LANGUAGE
 
 logger = logging.getLogger("sango.gemini")
 
 _API_KEY = os.getenv("GEMINI_API_KEY")
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash-lite")
 _TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.9"))
-_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "512"))
+_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "2048"))
 
 # Only build a client if a key is configured. Without one, is_configured()
 # returns False and the endpoint can respond gracefully instead of crashing.
@@ -39,10 +40,6 @@ def is_configured() -> bool:
     return _client is not None
 
 
-def _resolve_language(language: str) -> str:
-    return language if language in SYSTEM_PROMPTS else DEFAULT_LANGUAGE
-
-
 def _build_contents(
     message: str,
     history: Sequence[HistoryItem],
@@ -51,7 +48,7 @@ def _build_contents(
     """Few-shot examples first (to anchor tone), then real history, then the new message."""
     contents: List[types.Content] = []
 
-    for example in FEW_SHOT_EXAMPLES.get(language, []):
+    for example in persona.few_shot_for(language):
         contents.append(
             types.Content(role="user", parts=[types.Part(text=example["user"])])
         )
@@ -76,14 +73,14 @@ def generate_reply(
     if _client is None:
         raise RuntimeError("Gemini client is not configured (missing GEMINI_API_KEY)")
 
-    lang = _resolve_language(language)
+    lang = persona.resolve_language(language)
     contents = _build_contents(message, history, lang)
 
     response = _client.models.generate_content(
         model=_MODEL,
         contents=contents,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPTS[lang],
+            system_instruction=persona.system_prompt_for(lang),
             temperature=_TEMPERATURE,
             max_output_tokens=_MAX_OUTPUT_TOKENS,
         ),
