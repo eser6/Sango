@@ -18,7 +18,7 @@ from prompts import DEFAULT_LANGUAGE, FEW_SHOT_EXAMPLES, SYSTEM_PROMPTS
 logger = logging.getLogger("sango.gemini")
 
 _API_KEY = os.getenv("GEMINI_API_KEY")
-_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 _TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.9"))
 _MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "512"))
 
