@@ -6,6 +6,23 @@
   color-scheme: light;
 }
 
+html,
 body {
-  background-color: #fdf6ee;
+  height: 100%;
+}
+
+body {
+  background-color: #fbf4ec;
+}
+
+/* Respect users who prefer reduced motion — disable all animation/transition. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,81 +1,138 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ChatMessage, Language } from "./types";
+import { CONTENT } from "./lib/content";
+import { sendChat, getConversation } from "./lib/api";
+import { LanguageSelector } from "./components/LanguageSelector";
+import { MessageBubble } from "./components/MessageBubble";
+import { TypingIndicator } from "./components/TypingIndicator";
+import { ChatComposer } from "./components/ChatComposer";
+import { WelcomeView } from "./components/WelcomeView";
+import { SangoMark } from "./components/icons";
 
-// Shape of the backend /chat response. Keep in sync with the FastAPI ChatResponse model.
-type ChatResponse = {
-  reply: string;
-};
+let idCounter = 0;
+const nextId = () => `${Date.now()}-${idCounter++}`;
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// sessionStorage (NOT localStorage) so a refresh restores the session but it
+// does not linger across browser sessions.
+const STORAGE_KEY = "sango_conversation_id";
 
 export default function Home() {
-  const [reply, setReply] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>("");
+  const [language, setLanguage] = useState<Language>("pidgin");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
-  async function sendTestMessage() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch(`${API_URL}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: "Hello Sango, how you dey?",
-          language: "pidgin",
-          history: [],
-        }),
+  const content = CONTENT[language];
+  const isEmpty = messages.length === 0;
+
+  // On load: if we have a saved conversation id, fetch and restore its history.
+  useEffect(() => {
+    const saved = sessionStorage.getItem(STORAGE_KEY);
+    if (!saved) return;
+
+    getConversation(saved)
+      .then((data) => {
+        if (!data) {
+          // Conversation no longer exists — drop the stale id.
+          sessionStorage.removeItem(STORAGE_KEY);
+          return;
+        }
+        setConversationId(data.conversation_id);
+        setMessages(
+          data.messages.map((m) => ({
+            id: nextId(),
+            role: m.role,
+            content: m.content,
+          })),
+        );
+      })
+      .catch(() => {
+        /* network hiccup on restore — start fresh, no raw error shown */
       });
+  }, []);
 
-      if (!res.ok) {
-        throw new Error(`Request failed with status ${res.status}`);
+  // Keep the latest message / typing indicator in view.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
+
+  async function handleSend(text: string) {
+    if (loading) return;
+
+    // History = the conversation so far (excluding soft error bubbles).
+    const history = messages
+      .filter((m) => !m.isError)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    const userMessage: ChatMessage = { id: nextId(), role: "user", content: text };
+    setMessages((prev) => [...prev, userMessage]);
+    setLoading(true);
+
+    try {
+      const data = await sendChat({
+        message: text,
+        language,
+        history,
+        conversation_id: conversationId ?? undefined,
+      });
+      // Remember the conversation id (first turn returns a fresh one).
+      if (data.conversation_id && data.conversation_id !== conversationId) {
+        setConversationId(data.conversation_id);
+        sessionStorage.setItem(STORAGE_KEY, data.conversation_id);
       }
-
-      const data: ChatResponse = await res.json();
-      setReply(data.reply);
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: "assistant", content: data.reply },
+      ]);
     } catch {
-      // Never surface a raw error stack — keep it warm and soft (per CLAUDE.md).
-      setError("Sango no fit answer just now. Try am again small time.");
+      // Never surface a raw error — show a warm, language-appropriate retry.
+      setMessages((prev) => [
+        ...prev,
+        { id: nextId(), role: "assistant", content: content.retry, isError: true },
+      ]);
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center gap-8 px-6 py-12">
-      <header className="text-center">
-        <h1 className="text-5xl font-bold tracking-tight text-sango-700">
-          Sango
-        </h1>
-        <p className="mt-2 text-sm text-sango-600">
-          Your companion wey sabi talk Pidgin.
-        </p>
+    <div className="mx-auto flex h-[100dvh] max-w-2xl flex-col bg-cream">
+      <header className="flex flex-col gap-3 border-b border-sango-100 bg-cream/90 px-4 py-4 backdrop-blur sm:px-6">
+        <div className="flex items-center gap-3">
+          <SangoMark />
+          <div>
+            <h1 className="font-heading text-xl leading-none text-sango-700">Sango</h1>
+            <p className="mt-1 text-xs text-sango-500">{content.tagline}</p>
+          </div>
+        </div>
+        <LanguageSelector value={language} onChange={setLanguage} />
       </header>
 
-      <button
-        type="button"
-        onClick={sendTestMessage}
-        disabled={loading}
-        className="rounded-full bg-sango-500 px-6 py-3 font-medium text-white shadow-md transition-colors hover:bg-sango-600 active:bg-sango-700 disabled:cursor-not-allowed disabled:opacity-60"
+      <div
+        ref={scrollRef}
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-5 sm:px-6"
       >
-        {loading ? "Sango dey think…" : "Send test message"}
-      </button>
+        {isEmpty ? (
+          <WelcomeView content={content} onPick={handleSend} disabled={loading} />
+        ) : (
+          messages.map((message) => (
+            <MessageBubble key={message.id} message={message} />
+          ))
+        )}
+        {loading && <TypingIndicator />}
+      </div>
 
-      {reply && (
-        <div className="w-full rounded-2xl bg-white p-4 shadow-sm">
-          <p className="text-xs uppercase tracking-wide text-sango-400">
-            Sango
-          </p>
-          <p className="mt-1 text-base text-sango-900">{reply}</p>
-        </div>
-      )}
-
-      {error && (
-        <p className="w-full rounded-2xl bg-sango-100 p-4 text-center text-sm text-sango-700">
-          {error}
-        </p>
-      )}
-    </main>
+      <div className="border-t border-sango-100 bg-cream px-4 py-3 sm:px-6">
+        <ChatComposer
+          placeholder={content.placeholder}
+          disabled={loading}
+          onSend={handleSend}
+        />
+      </div>
+    </div>
   );
 }
